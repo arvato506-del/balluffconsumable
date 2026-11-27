@@ -380,6 +380,16 @@ function setSyncBadge(text, state) {
   el.style.color = state === 'ok' ? '#6ee7a0' : state === 'err' ? '#f87171' : '#888';
 }
 
+function normalizeDate(d) {
+  if (!d) return "";
+  if (typeof d === "string") {
+    if (d.includes("T")) return d.slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}/.test(d)) return d.slice(0, 10);
+  }
+  if (d instanceof Date) return d.toISOString().slice(0, 10);
+  return String(d).slice(0, 10);
+}
+
 async function syncFromCloud(showToast = false) {
   if (!isGasConfigured()) {
     setSyncBadge('尚未設定雲端', 'err');
@@ -394,9 +404,13 @@ async function syncFromCloud(showToast = false) {
     counts = Array.isArray(data.counts) ? data.counts : [];
     inbounds = Array.isArray(data.inbounds) ? data.inbounds : [];
     orders = Array.isArray(data.orders) ? data.orders.map(parseOrder) : [];
-    counts.forEach(c => { if (!c.id) c.id = nextCountId++; });
-    inbounds.forEach(i => { if (!i.id) i.id = nextInboundId++; });
-    orders.forEach(o => { if (!o.id) o.id = nextOrderId++; });
+
+    // Normalize all dates to YYYY-MM-DD
+    materials.forEach(m => { if (m.lastDate) m.lastDate = normalizeDate(m.lastDate); });
+    counts.forEach(c => { if (c.date) c.date = normalizeDate(c.date); if (!c.id) c.id = nextCountId++; });
+    inbounds.forEach(i => { if (i.date) i.date = normalizeDate(i.date); if (!i.id) i.id = nextInboundId++; });
+    orders.forEach(o => { if (o.date) o.date = normalizeDate(o.date); if (!o.id) o.id = nextOrderId++; });
+
     recalcDerived();
     setSyncBadge('雲端已同步', 'ok');
     if (showToast) toast('已從 Google Sheets 更新');
