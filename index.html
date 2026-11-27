@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Balluff包裝物料倉儲管理系統</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root {
+  --bg: #0f1117; --card: #1a1d27; --border: #2a2e3a; --text: #e8eaed; --muted: #9aa0a6;
+  --accent: #4f8cff; --accent2: #00c853; --warning: #ffb300; --danger: #ff5252; --radius: 12px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang HK", "Microsoft JhengHei", sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+header { background: linear-gradient(135deg, #1a1d27, #252836); padding: 16px 20px; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+h1 { margin: 0; font-size: 1.3rem; font-weight: 700; } h1 span { color: var(--accent); }
+.tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.tabs button { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 8px 14px; border-radius: 20px; cursor: pointer; font-size: 0.9rem; }
+.tabs button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+main { max-width: 1500px; margin: 0 auto; padding: 20px; }
+.section { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 20px; }
+.form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 12px; }
+label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 4px; }
+input, select, textarea { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); background: #12141c; color: var(--text); font-size: 1rem; }
+input:focus, select:focus { outline: none; border-color: var(--accent); }
+.btn { background: var(--accent); color: #fff; border: none; padding: 10px 20px; border-radius: 10px; font-size: 0.95rem; font-weight: 600; cursor: pointer; }
+.btn:hover { opacity: 0.9; } .btn.secondary { background: #252836; border: 1px solid var(--border); color: var(--text); }
+.btn.success { background: var(--accent2); color: #000; } .btn.warning { background: var(--warning); color: #000; }
+.btn.danger { background: var(--danger); color: #fff; }
+.btn.sm { padding: 4px 10px; font-size: 0.8rem; }
+table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+th { background: #252836; color: var(--text); padding: 8px; text-align: left; position: sticky; top: 0; }
+td { padding: 7px 8px; border-bottom: 1px solid var(--border); }
+tr:hover { background: #1e2230; }
+.status-Critical { color: var(--danger); font-weight: 700; } .status-Low { color: var(--warning); font-weight: 700; } .status-OK { color: var(--accent2); }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.stat-card { background: #12141c; border: 1px solid var(--border); border-radius: 10px; padding: 14px; text-align: center; }
+.stat-card .num { font-size: 1.6rem; font-weight: 700; } .stat-card .label { font-size: 0.8rem; color: var(--muted); }
+.stat-critical .num { color: var(--danger); } .stat-low .num { color: var(--warning); } .stat-ok .num { color: var(--accent2); }
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--accent2); color: #000; padding: 12px 24px; border-radius: 10px; font-weight: 600; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 100; }
+.toast.show { opacity: 1; } .empty { text-align: center; color: var(--muted); padding: 40px; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.filters button { background: #252836; border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: 20px; cursor: pointer; font-size: 0.85rem; }
+.filters button.active { background: var(--accent); border-color: var(--accent); }
+.formula-box { background: #12141c; border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; font-size: 0.9rem; }
+.formula-box strong { color: var(--accent); }
+.add-form { background: #1e2230; border-radius: 10px; padding: 16px; margin-bottom: 16px; border: 1px solid var(--border); display: none; }
+.add-form.show { display: block; }
+.batch-table input { width: 100px; padding: 6px; }
+.cbm-result { font-size: 1.3rem; font-weight: 700; color: var(--accent); margin-top: 12px; }
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
+.file-input { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>包裝物料<span>倉儲</span>管理</h1>
+  <div class="tabs">
+    <button class="active" data-tab="dashboard">Dashboard</button>
+    <button data-tab="materials">物料清單</button>
+    <button data-tab="count">盤點記錄</button>
+    <button data-tab="inbound">到倉記錄</button>
+    <button data-tab="usage">用量計算</button>
+    <button data-tab="cbm">CBM 計算</button>
+    <button data-tab="order">下單</button>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <span id="loginStatus" style="font-size:0.85rem;color:var(--muted)">未登入</span>
+    <button class="btn secondary sm" id="loginBtn">登入</button>
+  </div>
+</header>
+
+<!-- Login Modal -->
+<div id="loginModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;width:320px;max-width:90%;">
+    <h3 style="margin-top:0">管理員登入</h3>
+    <label>密碼</label>
+    <input type="password" id="loginPwd" placeholder="輸入密碼" style="margin-bottom:12px">
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn secondary" id="loginCancel">取消</button>
+      <button class="btn" id="loginSubmit">登入</button>
+    </div>
+    <p style="font-size:0.75rem;color:var(--muted);margin-top:12px;margin-bottom:0">same as SQL report</p>
+  </div>
+</div>
+
+<main>
+  <!-- Dashboard -->
+  <div id="tab-dashboard">
+    <div class="stat-grid" id="statGrid"></div>
+    <div class="section">
+      <h2 style="margin-top:0">庫存警示</h2>
+      <div id="alertList"></div>
+    </div>
+    <div class="section">
+      <h2 style="margin-top:0">資料管理</h2>
+      <p style="color:var(--muted)">一鍵清空所有盤點與到倉記錄（物料主檔保留）。</p>
+      <button class="btn danger" id="clearAllRecords">清空所有庫存紀錄</button>
+    </div>
+  </div>
+
+  <!-- Materials -->
+  <div id="tab-materials" style="display:none">
+    <div class="section">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+        <h2 style="margin:0">物料清單</h2>
+        <div class="toolbar">
+          <button class="btn secondary" id="toggleAddMat">＋ 新增物料</button>
+          <button class="btn secondary" id="exportMatTemplate">下載物料範本 (XLSX)</button>
+          <button class="btn secondary" id="importMatBtn">導入物料清單 (XLSX)</button>
+          <input type="file" id="importMatFile" class="file-input" accept=".xlsx,.xls">
+        </div>
+      </div>
+      <div class="add-form" id="addMatForm">
+        <h3 style="margin-top:0">新增物料</h3>
+        <div class="form-row">
+          <div><label>物料#</label><input type="text" id="newId" placeholder="例如 BAG007"></div>
+          <div><label>SAP#</label><input type="text" id="newSap"></div>
+          <div><label>Description</label><input type="text" id="newName"></div>
+          <div><label>單位</label><input type="text" id="newUm" placeholder="pcs / Roll / Pallet"></div>
+          <div><label>供應商</label><input type="text" id="newSupplier" placeholder="例如 ChengDu"></div>
+          <div><label>供應商 Email</label><input type="email" id="newEmail" placeholder="supplier@example.com"></div>
+          <div><label>類型</label><select id="newType"><option>Carton Box</option><option>Bag</option><option>Label</option><option>Pallet</option><option>Tape</option><option>Others</option></select></div>
+          <div><label>Lead Time (天)</label><input type="number" id="newLead" value="14"></div>
+          <div><label>CBM / pcs</label><input type="number" id="newCbm" step="0.000001" placeholder="0.001"></div>
+          <div><label>Monthly Usage</label><input type="number" id="newUsage" value="0"></div>
+        </div>
+        <button class="btn" id="saveNewMat">儲存新物料</button>
+      </div>
+      <div class="add-form" id="editMatForm">
+        <h3 style="margin-top:0">編輯物料</h3>
+        <input type="hidden" id="editId">
+        <div class="form-row">
+          <div><label>物料#</label><input type="text" id="editIdDisplay" disabled></div>
+          <div><label>SAP#</label><input type="text" id="editSap"></div>
+          <div><label>Description</label><input type="text" id="editName"></div>
+          <div><label>單位</label><input type="text" id="editUm"></div>
+          <div><label>供應商</label><input type="text" id="editSupplier"></div>
+          <div><label>供應商 Email</label><input type="email" id="editEmail"></div>
+          <div><label>類型</label><select id="editType"><option>Carton Box</option><option>Bag</option><option>Label</option><option>Pallet</option><option>Tape</option><option>Others</option></select></div>
+          <div><label>Lead Time (天)</label><input type="number" id="editLead"></div>
+          <div><label>CBM / pcs</label><input type="number" id="editCbm" step="0.000001"></div>
+          <div><label>Monthly Usage</label><input type="number" id="editUsage"></div>
+          <div><label>現有庫存</label><input type="number" id="editStock"></div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn" id="saveEditMat">儲存修改</button>
+          <button class="btn secondary" id="cancelEditMat">取消</button>
+        </div>
+      </div>
+      <div class="filters" id="supplierFilters"></div>
+      <div id="materialList"></div>
+    </div>
+  </div>
+
+  <!-- Count -->
+  <div id="tab-count" style="display:none">
+    <div class="section">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+        <h2 style="margin:0">批量盤點輸入</h2>
+        <div class="toolbar">
+          <button class="btn secondary" id="exportCountList">匯出盤點清單 (XLSX)</button>
+          <button class="btn secondary" id="importCountBtn">導入盤點紀錄 (XLSX)</button>
+          <input type="file" id="importCountFile" class="file-input" accept=".xlsx,.xls">
+        </div>
+      </div>
+      <p style="color:var(--muted); margin-top:0">物料已依物料# A→Z 排序。可匯出 XLSX 現場點數後再導入。</p>
+      <div id="batchCountTable"></div>
+      <div style="margin-top:12px">
+        <label>位置（套用到本次所有）</label>
+        <input type="text" id="batchLoc" placeholder="例如 1AJ / Warehouse" style="max-width:300px; margin-bottom:10px">
+      </div>
+      <button class="btn" id="saveBatchCount">儲存本次盤點</button>
+    </div>
+    <div class="section">
+      <h2 style="margin-top:0">歷史盤點</h2>
+      <div id="countList"></div>
+    </div>
+  </div>
+
+  <!-- Inbound -->
+  <div id="tab-inbound" style="display:none">
+    <div class="section">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+        <h2 style="margin:0">新增到倉</h2>
+        <div class="toolbar">
+          <button class="btn secondary" id="importInboundBtn">導入到倉紀錄 (XLSX)</button>
+          <input type="file" id="importInboundFile" class="file-input" accept=".xlsx,.xls">
+        </div>
+      </div>
+      <div class="form-row">
+        <div><label>物料#</label><select id="inMat"></select></div>
+        <div><label>到倉數量</label><input type="number" id="inQty" min="0"></div>
+        <div><label>供應商</label><input type="text" id="inSupplier"></div>
+        <div><label>PO#</label><input type="text" id="inPO"></div>
+        <div><label>關聯下單（選填）</label><select id="inOrderId"><option value="">無</option></select></div>
+      </div>
+      <button class="btn success" id="saveInboundBtn">儲存到倉</button>
+    </div>
+    <div class="section">
+      <h2 style="margin-top:0">歷史到倉</h2>
+      <div id="inboundList"></div>
+    </div>
+  </div>
+
+  <!-- Usage -->
+  <div id="tab-usage" style="display:none">
+    <div class="section">
+      <h2 style="margin-top:0">用量計算</h2>
+      <div class="formula-box">
+        <strong>計算公式：</strong><br>
+        期間用量 = 期初庫存 + 期間到貨 − 期末庫存<br>
+        Monthly Usage = 期間用量 × 30 ÷ 相隔天數
+      </div>
+      <div class="form-row">
+        <div><label>選擇物料</label><select id="usageMat"></select></div>
+        <div><label>區間數量</label>
+          <select id="usageIntervals">
+            <option value="2">最近 2 個區間</option>
+            <option value="3" selected>最近 3 個區間</option>
+            <option value="4">最近 4 個區間</option>
+          </select>
+        </div>
+        <div style="align-self:end"><button class="btn warning" id="calcUsageBtn">計算</button></div>
+      </div>
+      <div id="usageResult"></div>
+    </div>
+  </div>
+
+  <!-- CBM -->
+  <div id="tab-cbm" style="display:none">
+    <div class="section">
+      <h2 style="margin-top:0">CBM 計算工具</h2>
+      <div class="form-row">
+        <div><label>選擇物料</label><select id="cbmMat"></select></div>
+        <div><label>數量</label><input type="number" id="cbmQty" value="1" min="1"></div>
+        <div style="align-self:end"><button class="btn" id="calcCbmBtn">計算 CBM</button></div>
+      </div>
+      <div id="cbmResult"></div>
+    </div>
+    <div class="section">
+      <h2 style="margin-top:0">現有庫存總 CBM</h2>
+      <div id="totalCbmList"></div>
+    </div>
+  </div>
+
+  <!-- Order -->
+  <div id="tab-order" style="display:none">
+    <div class="section">
+      <h2 style="margin-top:0">建立下單</h2>
+      <div class="form-row">
+        <div>
+          <label>供應商</label>
+          <select id="orderSupplier"></select>
+        </div>
+        <div>
+          <label>下單人</label>
+          <input type="text" id="orderPerson" placeholder="例如 Alfred Yeung" value="Alfred Yeung">
+        </div>
+        <div>
+          <label>客戶 / Project</label>
+          <input type="text" id="orderProject" placeholder="例如 Balluff" value="Balluff">
+        </div>
+        <div>
+          <label>到貨備註（選填）</label>
+          <input type="text" id="orderNote" placeholder="例如分2車到、急單等">
+        </div>
+      </div>
+      <div id="orderItemList" style="margin-top:12px"></div>
+      <button class="btn" id="generateOrderBtn" style="margin-top:12px">生成 Email</button>
+    <div class="section" id="orderResult" style="display:none">
+      <h3 style="margin-top:0">Email 草稿</h3>
+      <div class="form-row">
+        <div style="grid-column:1/-1">
+          <label>主旨</label>
+          <input type="text" id="emailSubject" readonly>
+        </div>
+        <div style="grid-column:1/-1">
+          <label>收件人</label>
+          <input type="text" id="emailTo" readonly>
+        </div>
+        <div style="grid-column:1/-1">
+          <label>內文</label>
+          <textarea id="emailBody" rows="10" readonly></textarea>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button class="btn secondary" id="copyEmailBtn">複製內文</button>
+        <button class="btn" id="mailtoBtn">開啟郵件程式</button>
+      </div>
+    </div>
+    <div class="section">
+      <h2 style="margin-top:0">下單紀錄</h2>
+      <div id="orderHistory"></div>
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const DEFAULT_MATERIALS = [
+  {id:"MXL001", sap:"111431", name:"Material label 90x40mm", um:"Roll", supplier:"ChengDu", type:"Label", usage:3, lead:11, stock:6, cbm:0.00324, lastDate:"2026-11-26"},
+  {id:"ZLB001", sap:"153450", name:"Zip lock Bag (280x350/0.05mm)", um:"pcs", supplier:"ChengDu", type:"Bag", usage:0, lead:0, stock:8200, cbm:0, lastDate:"2026-11-26"},
+  {id:"PLC001", sap:"210269", name:"Paper PLT cover w/4 sides Logo (1200*800*970cm)", um:"pcs", supplier:"木林森", type:"Carton Box", usage:200, lead:18, stock:82, cbm:0.048462, lastDate:"2026-11-26"},
+  {id:"WHB001", sap:"619357", name:"白盒(細) 116x55x51", um:"pcs", supplier:"ChengDu", type:"Carton Box", usage:1000, lead:11, stock:5300, cbm:0.0001344, lastDate:"2026-11-26"},
+  {id:"BWB001", sap:"222151", name:"啡盒(size 1) 215x155x73", um:"pcs", supplier:"ChengDu", type:"Carton Box", usage:1200, lead:11, stock:4200, cbm:0.0005724, lastDate:"2026-11-26"},
+  {id:"BWB002", sap:"223205", name:"啡盒(size 2) 360x250x100", um:"pcs", supplier:"ChengDu", type:"Carton Box", usage:500, lead:17, stock:680, cbm:0.003003, lastDate:"2026-11-26"},
+  {id:"BWB003", sap:"223206", name:"啡盒(size 3) 550x350x100", um:"pcs", supplier:"ChengDu", type:"Carton Box", usage:46, lead:10, stock:340, cbm:0.0045105, lastDate:"2026-11-26"},
+  {id:"BWB004", sap:"223208", name:"啡盒(size 4) 550x350x160", um:"pcs", supplier:"ChengDu", type:"Carton Box", usage:34, lead:14, stock:234, cbm:0.005723, lastDate:"2026-11-26"},
+  {id:"WHB003", sap:"619361", name:"白盒(中) 143x81x74", um:"pcs", supplier:"ChengDu", type:"Carton Box", usage:691, lead:24, stock:700, cbm:0.0003264, lastDate:"2026-11-26"},
+  {id:"CTN001", sap:"619376", name:"Outer Box w/4sides Logo 64*47*43 cm", um:"pcs", supplier:"ChengDu", type:"Carton Box", usage:12, lead:0, stock:170, cbm:0.015984, lastDate:"2026-11-26"},
+  {id:"PLT001", sap:"PLT001", name:"Plywood PLT base (1200*800mm) with corners", um:"Pallet", supplier:"木林森", type:"Pallet", usage:150, lead:11, stock:96, cbm:0.144, lastDate:"2026-11-26"},
+  {id:"THA001", sap:"OTH001", name:"5\"機用打包帶", um:"Roll", supplier:"Arvato-Yannie", type:"Others", usage:3, lead:15, stock:7, cbm:0.03362, lastDate:"2026-11-26"},
+  {id:"LAB001", sap:"LAB002", name:"4\"(W) x 3\"(H)mm Direct Thermal Label", um:"Roll", supplier:"Arvato-Yannie", type:"Label", usage:14, lead:14, stock:27, cbm:0.002773547, lastDate:"2026-11-26"},
+  {id:"CTN002", sap:"CTN001", name:"新大紙箱 55*36*36 cm", um:"pcs", supplier:"木林森", type:"Carton Box", usage:45, lead:14, stock:75, cbm:0.0086359, lastDate:"2026-11-26"},
+  {id:"CTN003", sap:"CTN002", name:"新細紙箱 39*34*33 cm", um:"pcs", supplier:"木林森", type:"Carton Box", usage:35, lead:12, stock:435, cbm:0.0064532, lastDate:"2026-11-26"},
+  {id:"CTN004", sap:"CTN003", name:"長條紙箱 (101cm)", um:"pcs", supplier:"KN Migration", type:"Carton Box", usage:3, lead:0, stock:28, cbm:0.003175, lastDate:"2026-11-26"},
+  {id:"CTN005", sap:"CTN004", name:"長條紙箱 (180cm)", um:"pcs", supplier:"KN Migration", type:"Carton Box", usage:3, lead:0, stock:20, cbm:0.00515, lastDate:"2026-11-26"},
+  {id:"CTN006", sap:"CTN006", name:"AU Balluff box(55X55X31)", um:"pcs", supplier:"木林森", type:"Carton Box", usage:60, lead:8, stock:240, cbm:0.0121862, lastDate:"2026-11-26"},
+  {id:"BAG003", sap:"BAG003", name:"牛皮紙氣泡信封袋(41cm x 29cm)", um:"pcs", supplier:"Arvato-Yannie", type:"Bag", usage:250, lead:9, stock:4303, cbm:0.0005945, lastDate:"2026-11-26"},
+  {id:"BAG005", sap:"BAG005", name:"牛皮紙氣泡信封袋(26cm x 18cm)", um:"pcs", supplier:"Arvato-Yannie", type:"Bag", usage:400, lead:14, stock:15048, cbm:0.0003744, lastDate:"2026-11-26"},
+  {id:"BAG006", sap:"BAG006", name:"6\"x 8\" Paper bubble envelopes", um:"pcs", supplier:"Arvato-Yannie", type:"Bag", usage:0, lead:0, stock:0, cbm:0.00021, lastDate:"2026-11-26"},
+  {id:"OTH002", sap:"OTH002", name:"紙角", um:"pcs", supplier:"Arvato-Yannie", type:"Others", usage:40, lead:0, stock:540, cbm:0.000825, lastDate:"2026-11-26"},
+  {id:"OTH004", sap:"OTH004", name:"LLDPE Stretch Film - Clear (Hand)", um:"Roll", supplier:"Arvato-Yannie", type:"Others", usage:18, lead:7, stock:8, cbm:0.00518175, lastDate:"2026-11-26"},
+  {id:"LAB005", sap:"LAB005", name:"100(W) x 184.5(H)mm Direct Thermal Blank Label", um:"Roll", supplier:"Arvato-Yannie", type:"Label", usage:2, lead:29, stock:10, cbm:0.00256, lastDate:"2026-11-26"},
+  {id:"LAB006", sap:"LAB006", name:"100(W) x 50(H) mm Removable Label (PARTIAL)", um:"Roll", supplier:"Arvato-Yannie", type:"Label", usage:1, lead:10, stock:494, cbm:0.002816, lastDate:"2026-11-26"},
+  {id:"TAP001", sap:"TAP001", name:"兩吋啡皺紋膠紙 - 50mm x 20M", um:"Roll", supplier:"Arvato-Yannie", type:"Tape", usage:8, lead:14, stock:0, cbm:0.0005, lastDate:"2026-11-26"},
+  {id:"TAP002", sap:"TAP002", name:"Clear Tape 封箱膠紙", um:"Roll", supplier:"Arvato-Yannie", type:"Tape", usage:35, lead:12, stock:600, cbm:0.0005415, lastDate:"2026-11-26"},
+  {id:"PLT003", sap:"PLT003", name:"Plastic pallet from CTU (120x80)", um:"Pallet", supplier:"ChengDu", type:"Pallet", usage:6, lead:0, stock:130, cbm:0.0576, lastDate:"2026-11-26"}
+];
+
+const SAMPLE_COUNTS = [
+  {id:1, date:"2026-11-26", mat:"BAG003", qty:4303, loc:"Warehouse"},
+  {id:2, date:"2026-11-26", mat:"BWB001", qty:4200, loc:"1AJ"},
+  {id:3, date:"2026-11-26", mat:"BWB002", qty:680, loc:"1AJ"},
+  {id:4, date:"2026-11-26", mat:"WHB001", qty:5300, loc:"1AJ"},
+  {id:5, date:"2026-11-26", mat:"PLT001", qty:96, loc:"1/F"},
+  {id:6, date:"2026-11-26", mat:"PLC001", qty:82, loc:"G/F"},
+  {id:7, date:"2026-11-26", mat:"OTH004", qty:8, loc:"Warehouse"},
+  {id:8, date:"2026-10-30", mat:"BAG003", qty:4365, loc:"Warehouse"},
+  {id:9, date:"2026-10-30", mat:"BWB001", qty:2950, loc:"1AJ"},
+  {id:10, date:"2026-09-30", mat:"BAG003", qty:4462, loc:"Warehouse"},
+  {id:11, date:"2026-09-15", mat:"BAG003", qty:4800, loc:"Warehouse"},
+  {id:12, date:"2026-08-31", mat:"BAG003", qty:0, loc:"Warehouse"}
+];
+
+const SAMPLE_INBOUNDS = [
+  {id:1, date:"2026-09-06", mat:"BAG003", qty:5000, supplier:"Arvato-Yannie"},
+  {id:2, date:"2026-08-11", mat:"BAG005", qty:2000, supplier:"Arvato-Yannie"},
+  {id:3, date:"2026-10-29", mat:"BWB001", qty:3000, supplier:"ChengDu"},
+  {id:4, date:"2026-09-09", mat:"BWB001", qty:1500, supplier:"ChengDu"},
+  {id:5, date:"2026-10-29", mat:"BWB002", qty:2000, supplier:"ChengDu"},
+  {id:6, date:"2026-09-16", mat:"BWB002", qty:1500, supplier:"ChengDu"},
+  {id:7, date:"2026-09-09", mat:"WHB001", qty:2000, supplier:"ChengDu"},
+  {id:8, date:"2026-11-10", mat:"PLT001", qty:200, supplier:"木林森"},
+  {id:9, date:"2026-10-27", mat:"PLT001", qty:200, supplier:"木林森"}
+];
+
+let materials = [], counts = [], inbounds = [], orders = [], currentSupplier = "全部";
+let nextCountId = 100, nextInboundId = 100, nextOrderId = 100;
+
+function getSortedMaterials() {
+  return [...materials].sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function loadData() {
+  try {
+    materials = JSON.parse(localStorage.getItem("wh_materials_v4")) || DEFAULT_MATERIALS.map(m => ({...m}));
+    counts = JSON.parse(localStorage.getItem("wh_counts_v4")) || SAMPLE_COUNTS.map(c => ({...c}));
+    inbounds = JSON.parse(localStorage.getItem("wh_inbounds_v4")) || SAMPLE_INBOUNDS.map(i => ({...i}));
+    orders = JSON.parse(localStorage.getItem("wh_orders_v4")) || [];
+    nextCountId = parseInt(localStorage.getItem("wh_nextCountId")) || 100;
+    nextInboundId = parseInt(localStorage.getItem("wh_nextInboundId")) || 100;
+    nextOrderId = parseInt(localStorage.getItem("wh_nextOrderId")) || 100;
+  } catch {
+    materials = DEFAULT_MATERIALS.map(m => ({...m}));
+    counts = SAMPLE_COUNTS.map(c => ({...c}));
+    inbounds = SAMPLE_INBOUNDS.map(i => ({...i}));
+    orders = [];
+  }
+  counts.forEach(c => { if (!c.id) c.id = nextCountId++; });
+  inbounds.forEach(i => { if (!i.id) i.id = nextInboundId++; });
+  orders.forEach(o => { if (!o.id) o.id = nextOrderId++; });
+  recalcDerived();
+}
+function saveData() {
+  localStorage.setItem("wh_materials_v4", JSON.stringify(materials));
+  localStorage.setItem("wh_counts_v4", JSON.stringify(counts));
+  localStorage.setItem("wh_inbounds_v4", JSON.stringify(inbounds));
+  localStorage.setItem("wh_orders_v4", JSON.stringify(orders));
+  localStorage.setItem("wh_nextCountId", nextCountId);
+  localStorage.setItem("wh_nextInboundId", nextInboundId);
+  localStorage.setItem("wh_nextOrderId", nextOrderId);
+}
+function recalcDerived() {
+  materials.forEach(m => {
+    m.max = Math.ceil((m.usage||0) * 1.5);
+    m.min = Math.ceil((m.usage||0) * 0.75);
+    m.safety = Math.ceil((m.usage||0) * (m.lead||0) / 30 + (m.usage||0) * 0.3);
+    if ((m.stock||0) <= m.safety) m.status = "Critical";
+    else if ((m.stock||0) <= m.min) m.status = "Low";
+    else m.status = "OK";
+  });
+}
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2200);
+}
+function switchTab(tab) {
+  document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
+  ["dashboard","materials","count","inbound","usage","cbm","order"].forEach(t => {
+    document.getElementById("tab-" + t).style.display = t === tab ? "block" : "none";
+  });
+  if (tab === "dashboard") renderDashboard();
+  if (tab === "materials") renderMaterials();
+  if (tab === "count") renderBatchCount();
+  if (tab === "inbound") { renderInbounds(); fillOrderSelect(); }
+  if (tab === "usage") fillMatSelects();
+  if (tab === "cbm") renderCbm();
+  if (tab === "order") { renderOrder(); renderOrderHistory(); }
+}
+function renderDashboard() {
+  const total = materials.length;
+  const critical = materials.filter(m => m.status === "Critical").length;
+  const low = materials.filter(m => m.status === "Low").length;
+  const ok = materials.filter(m => m.status === "OK").length;
+  const totalCbm = materials.reduce((s, m) => s + (m.stock||0) * (m.cbm||0), 0);
+  document.getElementById("statGrid").innerHTML = `
+    <div class="stat-card"><div class="num">${total}</div><div class="label">總物料</div></div>
+    <div class="stat-card stat-critical"><div class="num">${critical}</div><div class="label">Critical</div></div>
+    <div class="stat-card stat-low"><div class="num">${low}</div><div class="label">Low</div></div>
+    <div class="stat-card stat-ok"><div class="num">${ok}</div><div class="label">OK</div></div>
+    <div class="stat-card"><div class="num">${totalCbm.toFixed(1)}</div><div class="label">總 CBM</div></div>`;
+  const alerts = materials.filter(m => m.status === "Critical" || m.status === "Low");
+  document.getElementById("alertList").innerHTML = alerts.length === 0 ? '<div class="empty">目前無警示</div>'
+    : `<table><tr><th>物料#</th><th>Description</th><th>現有庫存</th><th>Safety</th><th>狀態</th><th>建議</th></tr>` +
+      alerts.map(m => `<tr><td>${m.id}</td><td>${m.name}</td><td>${(m.stock||0).toLocaleString()}</td><td>${m.safety.toLocaleString()}</td><td class="status-${m.status}">${m.status}</td><td>${m.status==="Critical"?"立即下單":"建議補貨"}</td></tr>`).join("") + "</table>";
+}
+function renderMaterials() {
+  const suppliers = ["全部", ...new Set(materials.map(m => m.supplier))];
+  document.getElementById("supplierFilters").innerHTML = suppliers.map(s => `<button class="${currentSupplier===s?'active':''}" data-s="${s}">${s}</button>`).join("");
+  document.querySelectorAll("#supplierFilters button").forEach(btn => btn.onclick = () => { currentSupplier = btn.dataset.s; renderMaterials(); });
+  const filtered = currentSupplier === "全部" ? getSortedMaterials() : getSortedMaterials().filter(m => m.supplier === currentSupplier);
+  document.getElementById("materialList").innerHTML = `<table><tr><th>物料#</th><th>Description</th><th>單位</th><th>類型</th><th>供應商</th><th>Email</th><th>Usage</th><th>庫存</th><th>Safety</th><th>CBM/pcs</th><th>狀態</th><th></th></tr>` +
+    filtered.map(m => `<tr><td>${m.id}</td><td>${m.name}</td><td>${m.um||''}</td><td>${m.type||''}</td><td>${m.supplier}</td><td>${m.email||''}</td><td>${(m.usage||0).toLocaleString()}</td><td>${(m.stock||0).toLocaleString()}</td><td>${m.safety.toLocaleString()}</td><td>${(m.cbm||0).toFixed(6)}</td><td class="status-${m.status}">${m.status}</td><td><button class="btn secondary sm" data-edit-mat="${m.id}">編輯</button> <button class="btn danger sm" data-del-mat="${m.id}">刪除</button></td></tr>`).join("") + "</table>";
+  document.querySelectorAll("[data-del-mat]").forEach(btn => {
+    btn.onclick = () => {
+      if (!requireLogin()) return;
+      const id = btn.dataset.delMat;
+      if (!confirm("確定刪除物料 " + id + "？")) return;
+      materials = materials.filter(m => m.id !== id);
+      saveData();
+      toast("已刪除物料 " + id);
+      renderMaterials();
+    };
+  });
+  document.querySelectorAll("[data-edit-mat]").forEach(btn => {
+    btn.onclick = () => {
+      if (!requireLogin()) return;
+      openEditMaterial(btn.dataset.editMat);
+    };
+  });
+}
+function fillMatSelects() {
+  const opts = getSortedMaterials().map(m => `<option value="${m.id}">${m.id} - ${m.name}</option>`).join("");
+  ["inMat","usageMat","cbmMat"].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = opts; });
+}
+function renderBatchCount() {
+  fillMatSelects();
+  const sorted = getSortedMaterials();
+  document.getElementById("batchCountTable").innerHTML = `
+    <table class="batch-table"><tr><th>物料#</th><th>Description</th><th>單位</th><th>現有庫存</th><th>本次盤點數量</th></tr>
+    ${sorted.map(m => `<tr><td>${m.id}</td><td>${m.name}</td><td>${m.um||''}</td><td>${(m.stock||0).toLocaleString()}</td><td><input type="number" min="0" data-mat="${m.id}" placeholder=""></td></tr>`).join("")}
+    </table>`;
+  const hist = [...counts].sort((a,b) => b.date.localeCompare(a.date) || b.id - a.id).slice(0, 100);
+  document.getElementById("countList").innerHTML = hist.length === 0 ? '<div class="empty">尚無盤點記錄</div>'
+    : `<table><tr><th>日期</th><th>物料#</th><th>數量</th><th>位置</th><th></th></tr>` +
+      hist.map(c => `<tr><td>${c.date}</td><td>${c.mat}</td><td>${c.qty.toLocaleString()}</td><td>${c.loc||''}</td><td><button class="btn danger sm" data-del-count="${c.id}">刪除</button></td></tr>`).join("") + "</table>";
+  document.querySelectorAll("[data-del-count]").forEach(btn => {
+    btn.onclick = () => {
+      const id = +btn.dataset.delCount;
+      if (!confirm("確定刪除此筆盤點記錄？")) return;
+      counts = counts.filter(c => c.id !== id);
+      saveData();
+      toast("已刪除盤點記錄");
+      renderBatchCount();
+    };
+  });
+}
+function renderInbounds() {
+  fillMatSelects();
+  const sorted = [...inbounds].sort((a,b) => b.date.localeCompare(a.date) || b.id - a.id).slice(0, 100);
+  document.getElementById("inboundList").innerHTML = sorted.length === 0 ? '<div class="empty">尚無到倉記錄</div>'
+    : `<table><tr><th>到倉日</th><th>物料#</th><th>數量</th><th>供應商</th><th>關聯下單</th><th></th></tr>` +
+      sorted.map(i => `<tr><td>${i.date}</td><td>${i.mat}</td><td>${i.qty.toLocaleString()}</td><td>${i.supplier||''}</td><td>${i.orderId ? '#'+i.orderId : ''}</td><td><button class="btn danger sm" data-del-in="${i.id}">刪除</button></td></tr>`).join("") + "</table>";
+  document.querySelectorAll("[data-del-in]").forEach(btn => {
+    btn.onclick = () => {
+      const id = +btn.dataset.delIn;
+      if (!confirm("確定刪除此筆到倉記錄？")) return;
+      inbounds = inbounds.filter(x => x.id !== id);
+      saveData();
+      toast("已刪除到倉記錄");
+      renderInbounds();
+    };
+  });
+}
+function renderCbm() {
+  fillMatSelects();
+  const rows = getSortedMaterials().filter(m => m.cbm > 0).map(m => {
+    const cbm = (m.stock||0) * m.cbm;
+    return `<tr><td>${m.id}</td><td>${m.name}</td><td>${(m.stock||0).toLocaleString()}</td><td>${m.cbm.toFixed(6)}</td><td>${cbm.toFixed(3)}</td></tr>`;
+  }).join("");
+  const total = materials.reduce((s, m) => s + (m.stock||0) * (m.cbm||0), 0);
+  document.getElementById("totalCbmList").innerHTML = `<table><tr><th>物料#</th><th>Description</th><th>庫存</th><th>CBM/pcs</th><th>總 CBM</th></tr>${rows}<tr><td colspan="4" style="text-align:right;font-weight:700">合計</td><td style="font-weight:700;color:var(--accent)">${total.toFixed(2)}</td></tr></table>`;
+}
+
+function exportCountList() {
+  const sorted = getSortedMaterials();
+  const data = [["物料#", "Description", "單位", "現有庫存", "本次盤點數量", "位置"]];
+  sorted.forEach(m => data.push([m.id, m.name, m.um||"", m.stock||0, "", ""]));
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws["!cols"] = [{wch:12},{wch:45},{wch:10},{wch:12},{wch:14},{wch:15}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "盤點清單");
+  XLSX.writeFile(wb, `盤點清單_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast("已匯出盤點清單 (XLSX)");
+}
+
+function importCountsFromFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, {type: "array"});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {header: 1});
+      let imported = 0;
+      const today = new Date().toISOString().slice(0,10);
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        if (!r || !r[0]) continue;
+        const mat = String(r[0]).trim().toUpperCase();
+        const qty = parseInt(r[4]);
+        const loc = r[5] ? String(r[5]).trim() : "";
+        const date = r[6] ? String(r[6]).slice(0,10) : today;
+        if (!mat || isNaN(qty) || qty < 0) continue;
+        if (!materials.some(m => m.id === mat)) continue;
+        counts.push({id: nextCountId++, date, mat, qty, loc});
+        const m = materials.find(x => x.id === mat);
+        if (m) { m.stock = qty; m.lastDate = date; }
+        imported++;
+      }
+      if (imported === 0) return toast("未找到有效盤點資料（請確認「本次盤點數量」欄有數字）");
+      recalcDerived(); saveData();
+      toast(`已導入 ${imported} 筆盤點記錄`);
+      renderBatchCount();
+    } catch (err) {
+      toast("導入失敗：" + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function importInboundsFromFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, {type: "array"});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {header: 1});
+      let imported = 0;
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        if (!r || !r[0]) continue;
+        const date = r[0] ? String(r[0]).slice(0,10) : "";
+        const mat = String(r[1] || "").trim().toUpperCase();
+        const qty = parseInt(r[2]);
+        const supplier = r[3] ? String(r[3]).trim() : "";
+        if (!date || !mat || isNaN(qty) || qty <= 0) continue;
+        if (!materials.some(m => m.id === mat)) continue;
+        inbounds.push({id: nextInboundId++, date, mat, qty, supplier});
+        const m = materials.find(x => x.id === mat);
+        if (m) m.stock = (m.stock||0) + qty;
+        imported++;
+      }
+      if (imported === 0) return toast("未找到有效到倉資料（欄位：日期, 物料#, 數量, 供應商）");
+      recalcDerived(); saveData();
+      toast(`已導入 ${imported} 筆到倉記錄`);
+      renderInbounds();
+    } catch (err) {
+      toast("導入失敗：" + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+document.getElementById("toggleAddMat").onclick = () => {
+  if (!requireLogin()) return;
+  document.getElementById("addMatForm").classList.toggle("show");
+};
+document.getElementById("saveNewMat").onclick = () => {
+  const id = document.getElementById("newId").value.trim().toUpperCase();
+  const name = document.getElementById("newName").value.trim();
+  if (!id || !name) return toast("請填寫物料# 與 Description");
+  if (materials.some(m => m.id === id)) return toast("物料# 已存在");
+  materials.push({
+    id, sap: document.getElementById("newSap").value.trim(), name,
+    um: document.getElementById("newUm").value.trim() || "pcs",
+    supplier: document.getElementById("newSupplier").value.trim(),
+    email: document.getElementById("newEmail").value.trim(),
+    type: document.getElementById("newType").value,
+    usage: parseInt(document.getElementById("newUsage").value) || 0,
+    lead: parseInt(document.getElementById("newLead").value) || 0,
+    stock: 0, cbm: parseFloat(document.getElementById("newCbm").value) || 0,
+    lastDate: ""
+  });
+  recalcDerived(); saveData();
+  ["newId","newSap","newName","newUm","newSupplier","newEmail","newCbm","newUsage"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("addMatForm").classList.remove("show");
+  toast("已新增物料 " + id);
+  renderMaterials();
+};
+
+function openEditMaterial(id) {
+  const m = materials.find(x => x.id === id);
+  if (!m) return;
+  document.getElementById("editId").value = m.id;
+  document.getElementById("editIdDisplay").value = m.id;
+  document.getElementById("editSap").value = m.sap || "";
+  document.getElementById("editName").value = m.name || "";
+  document.getElementById("editUm").value = m.um || "";
+  document.getElementById("editSupplier").value = m.supplier || "";
+  document.getElementById("editEmail").value = m.email || "";
+  document.getElementById("editType").value = m.type || "Others";
+  document.getElementById("editLead").value = m.lead || 0;
+  document.getElementById("editCbm").value = m.cbm || 0;
+  document.getElementById("editUsage").value = m.usage || 0;
+  document.getElementById("editStock").value = m.stock || 0;
+  document.getElementById("editMatForm").classList.add("show");
+  document.getElementById("addMatForm").classList.remove("show");
+  document.getElementById("editMatForm").scrollIntoView({behavior: "smooth"});
+}
+
+document.getElementById("saveEditMat").onclick = () => {
+  const id = document.getElementById("editId").value;
+  const m = materials.find(x => x.id === id);
+  if (!m) return;
+  m.sap = document.getElementById("editSap").value.trim();
+  m.name = document.getElementById("editName").value.trim();
+  m.um = document.getElementById("editUm").value.trim();
+  m.supplier = document.getElementById("editSupplier").value.trim();
+  m.email = document.getElementById("editEmail").value.trim();
+  m.type = document.getElementById("editType").value;
+  m.lead = parseInt(document.getElementById("editLead").value) || 0;
+  m.cbm = parseFloat(document.getElementById("editCbm").value) || 0;
+  m.usage = parseInt(document.getElementById("editUsage").value) || 0;
+  m.stock = parseInt(document.getElementById("editStock").value) || 0;
+  recalcDerived(); saveData();
+  document.getElementById("editMatForm").classList.remove("show");
+  toast("已更新物料 " + id);
+  renderMaterials();
+};
+
+document.getElementById("cancelEditMat").onclick = () => {
+  document.getElementById("editMatForm").classList.remove("show");
+};
+document.getElementById("saveBatchCount").onclick = () => {
+  const loc = document.getElementById("batchLoc").value.trim();
+  const today = new Date().toISOString().slice(0,10);
+  let updated = 0;
+  document.querySelectorAll("#batchCountTable input[data-mat]").forEach(inp => {
+    const qty = parseInt(inp.value);
+    if (!isNaN(qty) && qty >= 0) {
+      const mat = inp.dataset.mat;
+      counts.push({id: nextCountId++, date: today, mat, qty, loc});
+      const m = materials.find(x => x.id === mat);
+      if (m) { m.stock = qty; m.lastDate = today; }
+      updated++;
+    }
+  });
+  if (updated === 0) return toast("請至少輸入一個數量");
+  recalcDerived(); saveData();
+  toast(`已更新 ${updated} 個物料的盤點`);
+  renderBatchCount();
+};
+document.getElementById("saveInboundBtn").onclick = () => {
+  const mat = document.getElementById("inMat").value;
+  const qty = parseInt(document.getElementById("inQty").value);
+  if (!mat || isNaN(qty)) return toast("請填寫物料與數量");
+  const today = new Date().toISOString().slice(0,10);
+  const orderId = document.getElementById("inOrderId").value || "";
+  const supplier = document.getElementById("inSupplier").value.trim();
+  inbounds.push({id: nextInboundId++, date: today, mat, qty, supplier, orderId});
+  const m = materials.find(x => x.id === mat);
+  if (m) m.stock = (m.stock||0) + qty;
+
+  // Update related order received qty
+  if (orderId) {
+    const order = orders.find(o => String(o.id) === orderId);
+    if (order) {
+      const item = order.items.find(i => i.id === mat);
+      if (item) {
+        item.received = (item.received || 0) + qty;
+        const allDone = order.items.every(i => (i.received||0) >= i.qty);
+        const anyReceived = order.items.some(i => (i.received||0) > 0);
+        order.status = allDone ? "已完成" : anyReceived ? "部分到貨" : "待到貨";
+      }
+    }
+  }
+
+  recalcDerived(); saveData();
+  document.getElementById("inQty").value = "";
+  toast("到倉已儲存");
+  renderInbounds();
+};
+document.getElementById("calcUsageBtn").onclick = () => {
+  const matId = document.getElementById("usageMat").value;
+  const n = parseInt(document.getElementById("usageIntervals").value);
+  const matCounts = counts.filter(c => c.mat === matId).sort((a,b) => a.date.localeCompare(b.date));
+  const matIn = inbounds.filter(i => i.mat === matId);
+  if (matCounts.length < 2) {
+    document.getElementById("usageResult").innerHTML = '<div class="empty">此物料盤點記錄不足（至少需要 2 次）</div>';
+    return;
+  }
+  const intervals = [];
+  for (let i = Math.max(0, matCounts.length - n - 1); i < matCounts.length - 1; i++) {
+    const start = matCounts[i], end = matCounts[i+1];
+    const days = Math.round((new Date(end.date) - new Date(start.date)) / 86400000);
+    if (days <= 0) continue;
+    const inboundQty = matIn.filter(ib => ib.date > start.date && ib.date <= end.date).reduce((s, ib) => s + ib.qty, 0);
+    const periodUsage = start.qty + inboundQty - end.qty;
+    const monthly = Math.round(periodUsage * 30 / days);
+    intervals.push({start: start.date, end: end.date, startQty: start.qty, endQty: end.qty, inbound: inboundQty, period: periodUsage, days, monthly});
+  }
+  const avg = intervals.length ? Math.round(intervals.reduce((s,x) => s + x.monthly, 0) / intervals.length) : 0;
+  document.getElementById("usageResult").innerHTML = `
+    <h3>計算結果（${matId}）</h3>
+    <table><tr><th>區間</th><th>期初</th><th>期末</th><th>期間到貨</th><th>期間用量</th><th>天數</th><th>Monthly</th></tr>
+    ${intervals.map(iv => `<tr><td>${iv.start} → ${iv.end}</td><td>${iv.startQty.toLocaleString()}</td><td>${iv.endQty.toLocaleString()}</td><td>${iv.inbound.toLocaleString()}</td><td>${iv.period.toLocaleString()}</td><td>${iv.days}</td><td><strong>${iv.monthly.toLocaleString()}</strong></td></tr>`).join("")}</table>
+    <div style="margin-top:16px;font-size:1.1rem">平均 Monthly Usage：<strong style="color:var(--accent);font-size:1.4rem">${avg.toLocaleString()}</strong></div>
+    <button class="btn secondary" id="applyUsageBtn" style="margin-top:12px">套用到物料清單</button>`;
+  document.getElementById("applyUsageBtn").onclick = () => {
+    const m = materials.find(x => x.id === matId);
+    if (m) { m.usage = avg; recalcDerived(); saveData(); toast("已更新 Monthly Usage 為 " + avg); }
+  };
+};
+document.getElementById("calcCbmBtn").onclick = () => {
+  const matId = document.getElementById("cbmMat").value;
+  const qty = parseInt(document.getElementById("cbmQty").value) || 0;
+  const m = materials.find(x => x.id === matId);
+  if (!m) return;
+  const cbm = qty * (m.cbm || 0);
+  document.getElementById("cbmResult").innerHTML = `
+    <div class="formula-box">
+      ${m.name}<br>
+      CBM / pcs = ${ (m.cbm||0).toFixed(6) }<br>
+      數量 = ${qty.toLocaleString()}<br>
+      <div class="cbm-result">總 CBM = ${cbm.toFixed(4)}</div>
+    </div>`;
+};
+
+function exportMatTemplate() {
+  const data = [[
+    "物料#", "SAP#", "Description", "單位", "供應商", "Email",
+    "類型", "Lead Time", "CBM/pcs", "Monthly Usage", "現有庫存"
+  ]];
+  data.push(["BAG007", "BAG007", "範例信封袋", "pcs", "Arvato-Yannie", "order@example.com", "Bag", 14, 0.0005, 100, 0]);
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws["!cols"] = [{wch:12},{wch:12},{wch:40},{wch:10},{wch:16},{wch:24},{wch:14},{wch:12},{wch:12},{wch:14},{wch:12}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "物料範本");
+  XLSX.writeFile(wb, "物料清單範本.xlsx");
+  toast("已下載物料範本");
+}
+
+function importMaterialsFromFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, {type: "array"});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {header: 1});
+      let added = 0, updated = 0;
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        if (!r || !r[0]) continue;
+        const id = String(r[0]).trim().toUpperCase();
+        const name = String(r[2] || "").trim();
+        if (!id || !name) continue;
+        const mat = {
+          id,
+          sap: String(r[1] || "").trim(),
+          name,
+          um: String(r[3] || "pcs").trim(),
+          supplier: String(r[4] || "").trim(),
+          email: String(r[5] || "").trim(),
+          type: String(r[6] || "Others").trim(),
+          lead: parseInt(r[7]) || 0,
+          cbm: parseFloat(r[8]) || 0,
+          usage: parseInt(r[9]) || 0,
+          stock: parseInt(r[10]) || 0,
+          lastDate: ""
+        };
+        const exist = materials.find(m => m.id === id);
+        if (exist) {
+          Object.assign(exist, mat);
+          updated++;
+        } else {
+          materials.push(mat);
+          added++;
+        }
+      }
+      if (added + updated === 0) return toast("未找到有效物料資料（請確認第一欄為物料#）");
+      recalcDerived();
+      saveData();
+      toast(`已導入：新增 ${added} 筆，更新 ${updated} 筆`);
+      renderMaterials();
+    } catch (err) {
+      toast("導入失敗：" + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+document.getElementById("exportMatTemplate").onclick = exportMatTemplate;
+document.getElementById("importMatBtn").onclick = () => {
+  if (!requireLogin()) return;
+  document.getElementById("importMatFile").click();
+};
+document.getElementById("importMatFile").onchange = e => {
+  if (e.target.files[0]) importMaterialsFromFile(e.target.files[0]);
+  e.target.value = "";
+};
+document.getElementById("exportCountList").onclick = exportCountList;
+document.getElementById("importCountBtn").onclick = () => document.getElementById("importCountFile").click();
+document.getElementById("importCountFile").onchange = e => {
+  if (e.target.files[0]) importCountsFromFile(e.target.files[0]);
+  e.target.value = "";
+};
+document.getElementById("importInboundBtn").onclick = () => document.getElementById("importInboundFile").click();
+document.getElementById("importInboundFile").onchange = e => {
+  if (e.target.files[0]) importInboundsFromFile(e.target.files[0]);
+  e.target.value = "";
+};
+document.getElementById("clearAllRecords").onclick = () => {
+  if (!requireLogin()) return;
+  if (!confirm("確定清空所有盤點與到倉記錄？此操作無法復原。\n（物料主檔會保留）")) return;
+  counts = [];
+  inbounds = [];
+  orders = [];
+  materials.forEach(m => { m.stock = 0; m.lastDate = ""; });
+  recalcDerived();
+  saveData();
+  toast("已清空所有庫存紀錄");
+  renderDashboard();
+};
+const SUPPLIER_TEMPLATES = {
+  "ChengDu": {
+    to: "Cheng.Luo@balluff.de; tina.zhang@balluff.com.cn",
+    cc: "balluff.opshk@arvato.com",
+    subject: date => `Balluff packing material order - ${date}`,
+    body: (items, person, note) => {
+      const lines = items.map(i => `${i.qty}pcs of ${i.sap || i.id}`);
+      return `Dear All\n\nPlease help to order the packing material – \n${lines.join(" and ")}\n\n${note ? note + "\n\n" : ""}Best regards,\n\n${person}`;
+    }
+  },
+  "Arvato-Yannie": {
+    to: "ryan.ng@arvato.com; yannie.tang@arvato.com",
+    cc: "procurement.hk@arvato.com",
+    subject: date => `Balluff - Packing material / ${date}`,
+    body: (items, person, note) => `Dear Yannie\n\nPlease find the attached file for your reference.\n\n${note ? note + "\n\n" : ""}Best regards,\n\n${person}`
+  },
+  "木林森": {
+    to: "sales3@mlsplywood.com",
+    cc: "",
+    subject: date => `木林森-Balluff consumable - ${date}`,
+    body: (items, person, note) => {
+      const lines = items.map(i => `${i.qty} pcs of ${i.name}`);
+      return `Dear\n\n請安排以下物料：\n${lines.join("\n")}\n\n${note ? note + "\n\n" : ""}Best regards,\n\n${person}`;
+    }
+  },
+  "default": {
+    to: "",
+    cc: "",
+    subject: date => `Packing material order - ${date}`,
+    body: (items, person, note) => {
+      const lines = items.map(i => `${i.qty} ${i.um || "pcs"} of ${i.id} (${i.name})`);
+      return `Dear\n\nPlease help to order the following packing materials:\n\n${lines.join("\n")}\n\n${note ? note + "\n\n" : ""}Best regards,\n\n${person}`;
+    }
+  }
+};
+
+function renderOrderHistory() {
+  const sorted = [...orders].sort((a,b) => b.date.localeCompare(a.date) || b.id - a.id);
+  document.getElementById("orderHistory").innerHTML = sorted.length === 0
+    ? '<div class="empty">暫無下單紀錄</div>'
+    : `<table><tr><th>日期</th><th>供應商</th><th>物料</th><th>下單數量</th><th>已到貨</th><th>狀態</th><th></th></tr>` +
+      sorted.map(o => o.items.map(i => `<tr>
+        <td>${o.date}</td><td>${o.supplier}</td><td>${i.id}</td>
+        <td>${i.qty}</td><td>${i.received||0}</td>
+        <td class="${o.status==='已完成'?'status-OK':o.status==='部分到貨'?'status-Low':'status-Critical'}">${o.status}</td>
+        <td><button class="btn danger sm" data-del-order="${o.id}">刪除</button></td>
+      </tr>`).join("")).join("") + "</table>";
+  document.querySelectorAll("[data-del-order]").forEach(btn => {
+    btn.onclick = () => {
+      if (!requireLogin()) return;
+      const id = parseInt(btn.dataset.delOrder);
+      if (!confirm("確定刪除此下單紀錄？")) return;
+      orders = orders.filter(o => o.id !== id);
+      saveData();
+      toast("已刪除下單紀錄");
+      renderOrderHistory();
+    };
+  });
+}
+
+function fillOrderSelect() {
+  const sel = document.getElementById("inOrderId");
+  if (!sel) return;
+  const pending = orders.filter(o => o.status !== "已完成");
+  sel.innerHTML = '<option value="">無</option>' + pending.map(o => 
+    `<option value="${o.id}">#${o.id} ${o.date} ${o.supplier}</option>`
+  ).join("");
+}
+
+function renderOrder() {
+  const suppliers = [...new Set(materials.map(m => m.supplier).filter(Boolean))].sort();
+  const sel = document.getElementById("orderSupplier");
+  sel.innerHTML = suppliers.map(s => `<option value="${s}">${s}</option>`).join("");
+  if (suppliers.length) renderOrderItems(sel.value);
+  sel.onchange = () => renderOrderItems(sel.value);
+}
+
+function renderOrderItems(supplier) {
+  const list = getSortedMaterials().filter(m => m.supplier === supplier);
+  document.getElementById("orderItemList").innerHTML = list.length === 0
+    ? '<div class="empty">此供應商暫無物料</div>'
+    : `<table><tr><th>物料#</th><th>Description</th><th>SAP#</th><th>單位</th><th>下單數量</th></tr>
+       ${list.map(m => `<tr>
+         <td>${m.id}</td><td>${m.name}</td><td>${m.sap||''}</td><td>${m.um||''}</td>
+         <td><input type="number" min="0" data-order-mat="${m.id}" style="width:100px"></td>
+       </tr>`).join("")}</table>`;
+}
+
+document.getElementById("generateOrderBtn").onclick = () => {
+  const supplier = document.getElementById("orderSupplier").value;
+  const person = document.getElementById("orderPerson").value.trim() || "Alfred Yeung";
+  const note = document.getElementById("orderNote").value.trim();
+  const items = [];
+  document.querySelectorAll("[data-order-mat]").forEach(inp => {
+    const qty = parseInt(inp.value);
+    if (qty > 0) {
+      const m = materials.find(x => x.id === inp.dataset.orderMat);
+      if (m) items.push({ ...m, qty });
+    }
+  });
+  if (items.length === 0) return toast("請至少輸入一項下單數量");
+
+  const today = new Date().toISOString().slice(0,10);
+  const displayDate = new Date().toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" });
+  const tpl = SUPPLIER_TEMPLATES[supplier] || SUPPLIER_TEMPLATES.default;
+
+  document.getElementById("emailSubject").value = tpl.subject(displayDate);
+  document.getElementById("emailTo").value = tpl.to;
+  document.getElementById("emailBody").value = tpl.body(items, person, note);
+  document.getElementById("orderResult").style.display = "block";
+
+  // Save order record
+  const order = {
+    id: nextOrderId++,
+    date: today,
+    supplier,
+    person,
+    project: document.getElementById("orderProject").value.trim() || "Balluff",
+    note,
+    items: items.map(i => ({id: i.id, name: i.name, sap: i.sap, qty: i.qty, received: 0})),
+    status: "待到貨"
+  };
+  orders.push(order);
+  saveData();
+
+  window._currentOrder = { 
+    supplier, person, note, items, today, displayDate, tpl,
+    project: document.getElementById("orderProject").value.trim() || "Balluff"
+  };
+  toast("已生成 Email 並儲存下單紀錄");
+  renderOrderHistory();
+};
+
+document.getElementById("copyEmailBtn").onclick = () => {
+  const text = document.getElementById("emailBody").value;
+  navigator.clipboard.writeText(text).then(() => toast("已複製內文"));
+};
+
+document.getElementById("mailtoBtn").onclick = () => {
+  const to = document.getElementById("emailTo").value;
+  const sub = encodeURIComponent(document.getElementById("emailSubject").value);
+  const body = encodeURIComponent(document.getElementById("emailBody").value);
+  window.location.href = `mailto:${to}?subject=${sub}&body=${body}`;
+};
+
+const ADMIN_PWD = "1qaz@WSX3edc";
+let isLoggedIn = sessionStorage.getItem("wh_logged_in") === "1";
+
+function updateLoginUI() {
+  document.getElementById("loginStatus").textContent = isLoggedIn ? "已登入" : "未登入";
+  document.getElementById("loginBtn").textContent = isLoggedIn ? "登出" : "登入";
+  document.getElementById("loginBtn").onclick = isLoggedIn ? doLogout : showLogin;
+}
+
+function showLogin() {
+  document.getElementById("loginModal").style.display = "flex";
+  document.getElementById("loginPwd").value = "";
+  document.getElementById("loginPwd").focus();
+}
+
+function doLogout() {
+  isLoggedIn = false;
+  sessionStorage.removeItem("wh_logged_in");
+  updateLoginUI();
+  toast("已登出");
+}
+
+function requireLogin() {
+  if (isLoggedIn) return true;
+  toast("請先登入");
+  showLogin();
+  return false;
+}
+
+document.getElementById("loginCancel").onclick = () => document.getElementById("loginModal").style.display = "none";
+document.getElementById("loginSubmit").onclick = () => {
+  const pwd = document.getElementById("loginPwd").value;
+  if (pwd === ADMIN_PWD) {
+    isLoggedIn = true;
+    sessionStorage.setItem("wh_logged_in", "1");
+    document.getElementById("loginModal").style.display = "none";
+    updateLoginUI();
+    toast("登入成功");
+  } else {
+    toast("密碼錯誤");
+  }
+};
+
+updateLoginUI();
+
+document.querySelectorAll(".tabs button").forEach(btn => btn.onclick = () => switchTab(btn.dataset.tab));
+
+loadData();
+switchTab("dashboard");
+</script>
+</body>
+</html>
