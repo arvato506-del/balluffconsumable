@@ -372,39 +372,42 @@ function isGasConfigured() {
 }
 
 async function loadData() {
-  // First try localStorage as fallback
-  try {
-    materials = JSON.parse(localStorage.getItem("wh_materials_v4")) || DEFAULT_MATERIALS.map(m => ({...m}));
-    counts = JSON.parse(localStorage.getItem("wh_counts_v4")) || SAMPLE_COUNTS.map(c => ({...c}));
-    inbounds = JSON.parse(localStorage.getItem("wh_inbounds_v4")) || SAMPLE_INBOUNDS.map(i => ({...i}));
-    orders = JSON.parse(localStorage.getItem("wh_orders_v4")) || [];
-    nextCountId = parseInt(localStorage.getItem("wh_nextCountId")) || 100;
-    nextInboundId = parseInt(localStorage.getItem("wh_nextInboundId")) || 100;
-    nextOrderId = parseInt(localStorage.getItem("wh_nextOrderId")) || 100;
-  } catch {
+  if (!isGasConfigured()) {
+    toast("請先設定 GAS_URL");
     materials = DEFAULT_MATERIALS.map(m => ({...m}));
     counts = SAMPLE_COUNTS.map(c => ({...c}));
     inbounds = SAMPLE_INBOUNDS.map(i => ({...i}));
     orders = [];
+    recalcDerived();
+    return;
   }
 
-  // If GAS is configured, load from cloud
-  if (isGasConfigured()) {
-    try {
-      const url = GAS_URL + (GAS_URL.includes('?') ? '&' : '?') + 't=' + Date.now();
-      const res = await fetch(url, { method: 'GET', cache: 'no-store', redirect: 'follow' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      if (Array.isArray(data.materials) && data.materials.length) materials = data.materials;
-      if (Array.isArray(data.counts)) counts = data.counts;
-      if (Array.isArray(data.inbounds)) inbounds = data.inbounds;
-      if (Array.isArray(data.orders)) orders = data.orders;
+  try {
+    const url = GAS_URL + (GAS_URL.includes('?') ? '&' : '?') + 't=' + Date.now();
+    const res = await fetch(url, { method: 'GET', cache: 'no-store', redirect: 'follow' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    materials = Array.isArray(data.materials) ? data.materials : [];
+    counts = Array.isArray(data.counts) ? data.counts : [];
+    inbounds = Array.isArray(data.inbounds) ? data.inbounds : [];
+    orders = Array.isArray(data.orders) ? data.orders.map(parseOrder) : [];
+
+    if (!materials.length) {
+      materials = DEFAULT_MATERIALS.map(m => ({...m}));
+      await pushToCloud();
+      toast("已初始化並上傳預設物料");
+    } else {
       toast("已從 Google Sheets 載入資料");
-    } catch (err) {
-      console.error("GAS load failed:", err);
-      toast("雲端載入失敗：" + (err.message || "請檢查部署網址與存取權"));
     }
+  } catch (err) {
+    console.error("GAS load failed:", err);
+    toast("雲端載入失敗：" + (err.message || "請檢查部署網址"));
+    materials = [];
+    counts = [];
+    inbounds = [];
+    orders = [];
   }
 
   counts.forEach(c => { if (!c.id) c.id = nextCountId++; });
@@ -413,31 +416,38 @@ async function loadData() {
   recalcDerived();
 }
 
-function saveData() {
-  // Always save to localStorage as backup
-  localStorage.setItem("wh_materials_v4", JSON.stringify(materials));
-  localStorage.setItem("wh_counts_v4", JSON.stringify(counts));
-  localStorage.setItem("wh_inbounds_v4", JSON.stringify(inbounds));
-  localStorage.setItem("wh_orders_v4", JSON.stringify(orders));
-  localStorage.setItem("wh_nextCountId", nextCountId);
-  localStorage.setItem("wh_nextInboundId", nextInboundId);
-  localStorage.setItem("wh_nextOrderId", nextOrderId);
-
-  // Sync to Google Sheets if configured
-  if (isGasConfigured()) {
-    fetch(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: "saveAll",
-        data: { materials, counts, inbounds, orders }
-      }),
-      redirect: 'follow'
-    }).catch(err => {
-      console.error("GAS save failed:", err);
-      toast("雲端儲存失敗");
-    });
+function parseOrder(o) {
+  if (typeof o.items === "string") {
+    try { o.items = JSON.parse(o.items); } catch { o.items = []; }
   }
+  return o;
+}
+
+async function pushToCloud() {
+  if (!isGasConfigured()) return;
+  const res = await fetch(GAS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({
+      action: "saveAll",
+      data: { materials, counts, inbounds, orders }
+    }),
+    redirect: 'follow'
+  });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const result = await res.json();
+  if (result && result.ok === false) throw new Error(result.error || '寫入失敗');
+}
+
+function saveData() {
+  if (!isGasConfigured()) {
+    toast("尚未設定雲端，無法儲存");
+    return;
+  }
+  pushToCloud().catch(err => {
+    console.error("GAS save failed:", err);
+    toast("雲端儲存失敗");
+  });
 }
 function recalcDerived() {
   materials.forEach(m => {
