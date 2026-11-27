@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Balluff包裝物料倉儲管理系統</title>
+<title>包裝物料倉儲管理系統</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root {
@@ -80,7 +80,7 @@ tr:hover { background: #1e2230; }
       <button class="btn secondary" id="loginCancel">取消</button>
       <button class="btn" id="loginSubmit">登入</button>
     </div>
-    <p style="font-size:0.75rem;color:var(--muted);margin-top:12px;margin-bottom:0">same as SQL report</p>
+    <p style="font-size:0.75rem;color:var(--muted);margin-top:12px;margin-bottom:0">預設密碼：admin123</p>
   </div>
 </div>
 
@@ -1000,7 +1000,7 @@ document.getElementById("mailtoBtn").onclick = () => {
   window.location.href = `mailto:${to}?subject=${sub}&body=${body}`;
 };
 
-const ADMIN_PWD = "1qaz@WSX3edc";
+const ADMIN_PWD = "admin123";
 let isLoggedIn = sessionStorage.getItem("wh_logged_in") === "1";
 
 function updateLoginUI() {
