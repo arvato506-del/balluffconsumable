@@ -65,6 +65,7 @@ tr:hover { background: #1e2230; }
     <button data-tab="order">下單</button>
   </div>
   <div style="display:flex;align-items:center;gap:8px;">
+    <span id="syncBadge" style="font-size:0.75rem;padding:2px 8px;border-radius:10px;background:#333;color:#888">未同步</span>
     <span id="loginStatus" style="font-size:0.85rem;color:var(--muted)">未登入</span>
     <button class="btn secondary sm" id="loginBtn">登入</button>
   </div>
@@ -371,83 +372,84 @@ function isGasConfigured() {
   return GAS_URL && !GAS_URL.includes('請貼上你的部署ID');
 }
 
-async function loadData() {
+function setSyncBadge(text, state) {
+  const el = document.getElementById('syncBadge');
+  if (!el) return;
+  el.textContent = text;
+  el.style.background = state === 'ok' ? '#1a4d2e' : state === 'err' ? '#4d1a1a' : '#333';
+  el.style.color = state === 'ok' ? '#6ee7a0' : state === 'err' ? '#f87171' : '#888';
+}
+
+async function syncFromCloud(showToast = false) {
   if (!isGasConfigured()) {
-    toast("請先設定 GAS_URL");
-    materials = DEFAULT_MATERIALS.map(m => ({...m}));
-    counts = SAMPLE_COUNTS.map(c => ({...c}));
-    inbounds = SAMPLE_INBOUNDS.map(i => ({...i}));
-    orders = [];
-    recalcDerived();
+    setSyncBadge('尚未設定雲端', 'err');
     return;
   }
-
+  setSyncBadge('同步中...', '');
   try {
-    const url = GAS_URL + (GAS_URL.includes('?') ? '&' : '?') + 't=' + Date.now();
-    const res = await fetch(url, { method: 'GET', cache: 'no-store', redirect: 'follow' });
+    const res = await fetch(GAS_URL, { method: 'GET', cache: 'no-store' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
-    if (data.error) throw new Error(data.error);
-
     materials = Array.isArray(data.materials) ? data.materials : [];
     counts = Array.isArray(data.counts) ? data.counts : [];
     inbounds = Array.isArray(data.inbounds) ? data.inbounds : [];
     orders = Array.isArray(data.orders) ? data.orders.map(parseOrder) : [];
-
-    if (!materials.length) {
-      materials = DEFAULT_MATERIALS.map(m => ({...m}));
-      await pushToCloud();
-      toast("已初始化並上傳預設物料");
-    } else {
-      toast("已從 Google Sheets 載入資料");
-    }
+    counts.forEach(c => { if (!c.id) c.id = nextCountId++; });
+    inbounds.forEach(i => { if (!i.id) i.id = nextInboundId++; });
+    orders.forEach(o => { if (!o.id) o.id = nextOrderId++; });
+    recalcDerived();
+    setSyncBadge('雲端已同步', 'ok');
+    if (showToast) toast('已從 Google Sheets 更新');
   } catch (err) {
-    console.error("GAS load failed:", err);
-    toast("雲端載入失敗：" + (err.message || "請檢查部署網址"));
-    materials = [];
-    counts = [];
-    inbounds = [];
-    orders = [];
+    console.error('Sync failed:', err);
+    setSyncBadge('雲端連線失敗', 'err');
+    if (showToast) toast('讀取雲端失敗');
   }
-
-  counts.forEach(c => { if (!c.id) c.id = nextCountId++; });
-  inbounds.forEach(i => { if (!i.id) i.id = nextInboundId++; });
-  orders.forEach(o => { if (!o.id) o.id = nextOrderId++; });
-  recalcDerived();
 }
 
 function parseOrder(o) {
-  if (typeof o.items === "string") {
+  if (typeof o.items === 'string') {
     try { o.items = JSON.parse(o.items); } catch { o.items = []; }
   }
   return o;
 }
 
-async function pushToCloud() {
-  if (!isGasConfigured()) return;
+async function apiPost(payload) {
+  if (!isGasConfigured()) throw new Error('尚未設定 GAS_URL');
+  setSyncBadge('儲存中...', '');
   const res = await fetch(GAS_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({
-      action: "saveAll",
-      data: { materials, counts, inbounds, orders }
-    }),
-    redirect: 'follow'
+    body: JSON.stringify(payload)
   });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const result = await res.json();
   if (result && result.ok === false) throw new Error(result.error || '寫入失敗');
+  setSyncBadge('雲端已同步', 'ok');
+  return result;
 }
 
-function saveData() {
-  if (!isGasConfigured()) {
-    toast("尚未設定雲端，無法儲存");
-    return;
+async function saveData() {
+  try {
+    await apiPost({ action: 'saveAll', data: { materials, counts, inbounds, orders } });
+  } catch (err) {
+    console.error('Save failed:', err);
+    setSyncBadge('儲存失敗', 'err');
+    toast('雲端儲存失敗');
   }
-  pushToCloud().catch(err => {
-    console.error("GAS save failed:", err);
-    toast("雲端儲存失敗");
-  });
+}
+
+async function loadData() {
+  await syncFromCloud(false);
+  if (!materials.length && isGasConfigured()) {
+    materials = DEFAULT_MATERIALS.map(m => ({...m}));
+    counts = SAMPLE_COUNTS.map(c => ({...c}));
+    inbounds = SAMPLE_INBOUNDS.map(i => ({...i}));
+    orders = [];
+    recalcDerived();
+    await saveData();
+    toast('已初始化預設資料');
+  }
 }
 function recalcDerived() {
   materials.forEach(m => {
@@ -469,13 +471,16 @@ function switchTab(tab) {
   ["dashboard","materials","count","inbound","usage","cbm","order"].forEach(t => {
     document.getElementById("tab-" + t).style.display = t === tab ? "block" : "none";
   });
-  if (tab === "dashboard") renderDashboard();
-  if (tab === "materials") renderMaterials();
-  if (tab === "count") renderBatchCount();
-  if (tab === "inbound") { renderInbounds(); fillOrderSelect(); }
-  if (tab === "usage") fillMatSelects();
-  if (tab === "cbm") renderCbm();
-  if (tab === "order") { renderOrder(); renderOrderHistory(); }
+  // Re-sync from cloud when switching tabs (same as stationery system)
+  syncFromCloud(false).then(() => {
+    if (tab === "dashboard") renderDashboard();
+    if (tab === "materials") renderMaterials();
+    if (tab === "count") renderBatchCount();
+    if (tab === "inbound") { renderInbounds(); fillOrderSelect(); }
+    if (tab === "usage") fillMatSelects();
+    if (tab === "cbm") renderCbm();
+    if (tab === "order") { renderOrder(); renderOrderHistory(); }
+  });
 }
 function renderDashboard() {
   const total = materials.length;
