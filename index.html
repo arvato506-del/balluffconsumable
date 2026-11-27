@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>包裝物料倉儲管理系統</title>
+<title>Balluff包裝物料倉儲管理系統</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root {
@@ -299,6 +299,9 @@ tr:hover { background: #1e2230; }
 <div class="toast" id="toast"></div>
 
 <script>
+// 請將下方網址替換為你的 Google Apps Script 部署網址（結尾為 /exec）
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzjtGIXJYm84xLCEQcBTny3nikDAF-wskYk7n2-kciyT7T_4PlOhhYF-Y-BrOZ0MHKE/exec';
+
 const DEFAULT_MATERIALS = [
   {id:"MXL001", sap:"111431", name:"Material label 90x40mm", um:"Roll", supplier:"ChengDu", type:"Label", usage:3, lead:11, stock:6, cbm:0.00324, lastDate:"2026-11-26"},
   {id:"ZLB001", sap:"153450", name:"Zip lock Bag (280x350/0.05mm)", um:"pcs", supplier:"ChengDu", type:"Bag", usage:0, lead:0, stock:8200, cbm:0, lastDate:"2026-11-26"},
@@ -364,7 +367,12 @@ function getSortedMaterials() {
   return [...materials].sort((a, b) => a.id.localeCompare(b.id));
 }
 
-function loadData() {
+function isGasConfigured() {
+  return GAS_URL && !GAS_URL.includes('請貼上你的部署ID');
+}
+
+async function loadData() {
+  // First try localStorage as fallback
   try {
     materials = JSON.parse(localStorage.getItem("wh_materials_v4")) || DEFAULT_MATERIALS.map(m => ({...m}));
     counts = JSON.parse(localStorage.getItem("wh_counts_v4")) || SAMPLE_COUNTS.map(c => ({...c}));
@@ -379,12 +387,33 @@ function loadData() {
     inbounds = SAMPLE_INBOUNDS.map(i => ({...i}));
     orders = [];
   }
+
+  // If GAS is configured, load from cloud
+  if (isGasConfigured()) {
+    try {
+      const res = await fetch(GAS_URL, { method: 'GET', cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.materials && data.materials.length) materials = data.materials;
+        if (data.counts) counts = data.counts;
+        if (data.inbounds) inbounds = data.inbounds;
+        if (data.orders) orders = data.orders;
+        toast("已從 Google Sheets 載入資料");
+      }
+    } catch (err) {
+      console.error("GAS load failed:", err);
+      toast("雲端載入失敗，使用本地資料");
+    }
+  }
+
   counts.forEach(c => { if (!c.id) c.id = nextCountId++; });
   inbounds.forEach(i => { if (!i.id) i.id = nextInboundId++; });
   orders.forEach(o => { if (!o.id) o.id = nextOrderId++; });
   recalcDerived();
 }
+
 function saveData() {
+  // Always save to localStorage as backup
   localStorage.setItem("wh_materials_v4", JSON.stringify(materials));
   localStorage.setItem("wh_counts_v4", JSON.stringify(counts));
   localStorage.setItem("wh_inbounds_v4", JSON.stringify(inbounds));
@@ -392,6 +421,18 @@ function saveData() {
   localStorage.setItem("wh_nextCountId", nextCountId);
   localStorage.setItem("wh_nextInboundId", nextInboundId);
   localStorage.setItem("wh_nextOrderId", nextOrderId);
+
+  // Sync to Google Sheets if configured
+  if (isGasConfigured()) {
+    fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: "saveAll",
+        data: { materials, counts, inbounds, orders }
+      })
+    }).catch(err => console.error("GAS save failed:", err));
+  }
 }
 function recalcDerived() {
   materials.forEach(m => {
@@ -1047,8 +1088,7 @@ updateLoginUI();
 
 document.querySelectorAll(".tabs button").forEach(btn => btn.onclick = () => switchTab(btn.dataset.tab));
 
-loadData();
-switchTab("dashboard");
+loadData().then(() => switchTab("dashboard"));
 </script>
 </body>
 </html>
