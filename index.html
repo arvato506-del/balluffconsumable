@@ -391,18 +391,19 @@ async function loadData() {
   // If GAS is configured, load from cloud
   if (isGasConfigured()) {
     try {
-      const res = await fetch(GAS_URL, { method: 'GET', cache: 'no-store' });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.materials && data.materials.length) materials = data.materials;
-        if (data.counts) counts = data.counts;
-        if (data.inbounds) inbounds = data.inbounds;
-        if (data.orders) orders = data.orders;
-        toast("已從 Google Sheets 載入資料");
-      }
+      const url = GAS_URL + (GAS_URL.includes('?') ? '&' : '?') + 't=' + Date.now();
+      const res = await fetch(url, { method: 'GET', cache: 'no-store', redirect: 'follow' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      if (Array.isArray(data.materials) && data.materials.length) materials = data.materials;
+      if (Array.isArray(data.counts)) counts = data.counts;
+      if (Array.isArray(data.inbounds)) inbounds = data.inbounds;
+      if (Array.isArray(data.orders)) orders = data.orders;
+      toast("已從 Google Sheets 載入資料");
     } catch (err) {
       console.error("GAS load failed:", err);
-      toast("雲端載入失敗，使用本地資料");
+      toast("雲端載入失敗：" + (err.message || "請檢查部署網址與存取權"));
     }
   }
 
@@ -430,8 +431,12 @@ function saveData() {
       body: JSON.stringify({
         action: "saveAll",
         data: { materials, counts, inbounds, orders }
-      })
-    }).catch(err => console.error("GAS save failed:", err));
+      }),
+      redirect: 'follow'
+    }).catch(err => {
+      console.error("GAS save failed:", err);
+      toast("雲端儲存失敗");
+    });
   }
 }
 function recalcDerived() {
