@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Balluff包裝物料倉儲管理系統</title>
+<title>包裝物料倉儲管理系統</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root {
@@ -54,7 +54,7 @@ tr:hover { background: #1e2230; }
 </head>
 <body>
 <header>
-  <h1>Balluff包裝物料<span>倉儲</span>管理</h1>
+  <h1>包裝物料<span>倉儲</span>管理</h1>
   <div class="tabs">
     <button class="active" data-tab="dashboard">Dashboard</button>
     <button data-tab="materials">物料清單</button>
@@ -477,7 +477,13 @@ function renderDashboard() {
   const alerts = materials.filter(m => m.status === "Critical" || m.status === "Low");
   document.getElementById("alertList").innerHTML = alerts.length === 0 ? '<div class="empty">目前無警示</div>'
     : `<table><tr><th>物料#</th><th>Description</th><th>現有庫存</th><th>Safety</th><th>狀態</th><th>建議</th></tr>` +
-      alerts.map(m => `<tr><td>${m.id}</td><td>${m.name}</td><td>${(m.stock||0).toLocaleString()}</td><td>${m.safety.toLocaleString()}</td><td class="status-${m.status}">${m.status}</td><td>${m.status==="Critical"?"立即下單":"建議補貨"}</td></tr>`).join("") + "</table>";
+      alerts.map(m => {
+        const hasOpenOrder = orders.some(o => o.status !== "已完成" && o.items.some(i => i.id === m.id));
+        const suggestion = hasOpenOrder
+          ? `<span style="background:#4f8cff22;color:#4f8cff;padding:2px 8px;border-radius:4px;font-weight:600">已下單</span>`
+          : (m.status === "Critical" ? "立即下單" : "建議補貨");
+        return `<tr><td>${m.id}</td><td>${m.name}</td><td>${(m.stock||0).toLocaleString()}</td><td>${m.safety.toLocaleString()}</td><td class="status-${m.status}">${m.status}</td><td>${suggestion}</td></tr>`;
+      }).join("") + "</table>";
 }
 function renderMaterials() {
   const suppliers = ["全部", ...new Set(materials.map(m => m.supplier))];
@@ -540,9 +546,30 @@ function renderInbounds() {
     btn.onclick = () => {
       const id = +btn.dataset.delIn;
       if (!confirm("確定刪除此筆到倉記錄？")) return;
+      const inbound = inbounds.find(x => x.id === id);
+      if (inbound) {
+        // Reverse stock
+        const m = materials.find(x => x.id === inbound.mat);
+        if (m) m.stock = Math.max(0, (m.stock||0) - inbound.qty);
+
+        // Reverse order received qty and status
+        if (inbound.orderId) {
+          const order = orders.find(o => String(o.id) === String(inbound.orderId));
+          if (order) {
+            const item = order.items.find(i => i.id === inbound.mat);
+            if (item) {
+              item.received = Math.max(0, (item.received||0) - inbound.qty);
+              const allDone = order.items.every(i => (i.received||0) >= i.qty);
+              const anyReceived = order.items.some(i => (i.received||0) > 0);
+              order.status = allDone ? "已完成" : anyReceived ? "部分到貨" : "待到貨";
+            }
+          }
+        }
+      }
       inbounds = inbounds.filter(x => x.id !== id);
+      recalcDerived();
       saveData();
-      toast("已刪除到倉記錄");
+      toast("已刪除到倉記錄，庫存與下單狀態已更新");
       renderInbounds();
     };
   });
